@@ -1,5 +1,4 @@
 *.iso
 /packer_cache
 *_rsa
-credential.pkr.hcl
 *.img
