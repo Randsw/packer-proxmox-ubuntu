@@ -7,8 +7,24 @@ packer {
     }
 }
 
+variable "proxmox_api_url" {
+    type = string
+    default = env("PROXMOX_API_URL")
+}
+
+variable "proxmox_api_token_id" {
+    type = string
+    default = env("PROXMOX_API_TOKEN_ID")
+}
+
+variable "proxmox_api_token_secret" {
+    type = string
+    sensitive = true
+    default = env("PROXMOX_API_TOKEN_SECRET")
+}
+
 # Resource Definiation for the VM Template
-source "proxmox" "ubuntu-server-jammy" {
+source "proxmox-iso" "ubuntu-server-jammy" {
     # Proxmox Connection Settings
     proxmox_url = "${var.proxmox_api_url}"
     username = "${var.proxmox_api_token_id}"
@@ -25,6 +41,7 @@ source "proxmox" "ubuntu-server-jammy" {
     # VM OS Settings
     # (Option 1) Local ISO File
     iso_file = "local:iso/ubuntu-22.04.1-live-server-amd64.iso"
+    #iso_file = "local:iso/jammy-server-cloudimg-amd64.img"
     # - or -
     # (Option 2) Download ISO
     #iso_url = "https://releases.ubuntu.com/22.04/ubuntu-22.04.1-live-server-amd64.iso"
@@ -39,17 +56,17 @@ source "proxmox" "ubuntu-server-jammy" {
     scsi_controller = "virtio-scsi-pci"
 
     disks {
-        disk_size = "60G"
+        disk_size = "20G"
         storage_pool = "local-lvm"
         storage_pool_type = "lvm"
         type = "scsi"
     }
 
     # VM CPU Settings
-    cores = "8"
+    cores = "2"
     
     # VM Memory Settings
-    memory = "8192" 
+    memory = "4096" 
 
     # VM Network Settings
     network_adapters {
@@ -62,23 +79,43 @@ source "proxmox" "ubuntu-server-jammy" {
     cloud_init = true
     cloud_init_storage_pool = "local-lvm"
 
-    # PACKER Boot Commands
-    boot_command = [
-    "c<wait5>",
-    "linux /casper/vmlinuz --- autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ",
-    "<enter><wait>",
-    "initrd /casper/initrd <enter><wait>",
-    "boot<enter>"
-    ]
-    boot_key_interval = "30ms"
-    boot_wait = "5s"
+    boot_key_interval = "50ms"
+    boot_wait = "6s"
 
-    # PACKER Autoinstall Settings
-    http_directory = "http" 
-    # (Optional) Bind IP Address and Port
-    # http_bind_address = "0.0.0.0"
-    http_port_min = 8802
-    http_port_max = 8802
+    # PACKER Boot Commands from HTTP server
+    # boot_command = [
+    #     "c",
+    #     "linux /casper/vmlinuz --- autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ",
+    #     "<enter><wait>",
+    #     "initrd /casper/initrd<enter><wait>",
+    #     "boot<enter>"
+    # ]
+    # http_directory = "http" 
+    # # (Optional) Bind IP Address and Port
+    # # http_bind_address = "0.0.0.0"
+    # http_port_min = 8802
+    # http_port_max = 8802
+    # http_interface = "wlp2s0"
+    # vm_interface = "vmbr0"
+
+
+    # PACKER Boot Commands from CD-ROM
+    boot_command = [
+        "c",
+        "linux /casper/vmlinuz --- autoinstall ",
+        "<enter><wait>",
+        "initrd /casper/initrd<enter><wait>",
+        "boot<enter>"
+    ]
+    
+    additional_iso_files {
+    cd_files = [
+        "./http/meta-data",
+        "./http/user-data"
+    ]
+    cd_label = "cidata"
+    iso_storage_pool = "local"
+    }
 
     ssh_username = "ubuntu"
 
@@ -89,14 +126,14 @@ source "proxmox" "ubuntu-server-jammy" {
     # ssh_private_key_file = "~/.ssh/id_rsa"
 
     # Raise the timeout, when installation takes longer
-    ssh_timeout = "20m"
+    ssh_timeout = "60m"
 }
 
 # Build Definition to create the VM Template
 build {
 
     name = "ubuntu-server-jammy"
-    sources = ["source.proxmox.ubuntu-server-jammy"]
+    sources = ["source.proxmox-iso.ubuntu-server-jammy"]
 
     # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
     provisioner "shell" {
@@ -120,16 +157,15 @@ build {
         inline = [ "sudo cp /tmp/99-pve.cfg /etc/cloud/cloud.cfg.d/99-pve.cfg" ]
     }
 
-    # Install docker
+    # Provisioning the VM Template with Docker Installation #4
     provisioner "shell" {
-        inline = [ "sudo apt-get install ca-certificates curl gnupg lsb-release",
-                    "sudo mkdir -p /etc/apt/keyrings",
-                    "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
-                    "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-                    $(lsb_release -cs) stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
-                    "sudo apt-get update",
-                    "sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin",
-                    "sudo usermod -aG docker $USER"
+        inline = [
+            "sudo apt-get install -y ca-certificates curl gnupg lsb-release",
+            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg",
+            "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
+            "sudo apt-get -y update",
+            "sudo apt-get install -y docker-ce docker-ce-cli containerd.io",
+            "sudo usermod -aG docker $USER"
         ]
     }
 }
