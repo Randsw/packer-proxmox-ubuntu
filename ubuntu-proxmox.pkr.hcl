@@ -23,6 +23,11 @@ variable "proxmox_api_token_secret" {
     default = env("PROXMOX_API_TOKEN_SECRET")
 }
 
+variable "vm_id" {
+    type = string
+    default = "999"
+}
+
 # Resource Definiation for the VM Template
 source "proxmox-iso" "ubuntu-server-jammy" {
     # Proxmox Connection Settings
@@ -34,7 +39,7 @@ source "proxmox-iso" "ubuntu-server-jammy" {
     
     # VM General Settings
     node = "pve"
-    vm_id = "999"
+    vm_id = "${var.vm_id}"
     vm_name = "ml-ubuntu-server-jammy"
     template_description = "ML Ubuntu Server jammy Image"
 
@@ -57,8 +62,8 @@ source "proxmox-iso" "ubuntu-server-jammy" {
 
     disks {
         disk_size = "20G"
-        storage_pool = "local-lvm"
-        storage_pool_type = "lvm"
+        storage_pool = "local-zfs"
+        storage_pool_type = "zfspool"
         type = "scsi"
     }
 
@@ -77,7 +82,7 @@ source "proxmox-iso" "ubuntu-server-jammy" {
 
     # VM Cloud-Init Settings
     cloud_init = true
-    cloud_init_storage_pool = "local-lvm"
+    cloud_init_storage_pool = "local-zfs"
 
     boot_key_interval = "50ms"
     boot_wait = "6s"
@@ -115,6 +120,7 @@ source "proxmox-iso" "ubuntu-server-jammy" {
     ]
     cd_label = "cidata"
     iso_storage_pool = "local"
+    unmount = true
     }
 
     ssh_username = "ubuntu"
@@ -168,4 +174,10 @@ build {
             "sudo usermod -aG docker $USER"
         ]
     }
+
+    # Delete CD-ROM with ISO https://github.com/hashicorp/packer-plugin-proxmox/issues/83
+    post-processor "shell-local" {
+        command = "curl -k -X POST -H 'Authorization: PVEAPIToken=${var.proxmox_api_token_id}=${var.proxmox_api_token_secret}' --data-urlencode delete=ide2 ${var.proxmox_api_url}/nodes/pve/qemu/${var.vm_id}/config"
+    }
+    
 }
