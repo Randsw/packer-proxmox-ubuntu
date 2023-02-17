@@ -40,8 +40,8 @@ source "proxmox-iso" "ubuntu-server-jammy" {
     # VM General Settings
     node = "pve"
     vm_id = "${var.vm_id}"
-    vm_name = "ml-ubuntu-server-jammy"
-    template_description = "ML Ubuntu Server jammy Image"
+    vm_name = "docker-ubuntu-server-jammy"
+    template_description = "Docker Ubuntu Server jammy Image"
 
     # VM OS Settings
     # (Option 1) Local ISO File
@@ -148,7 +148,9 @@ build {
             "sudo cloud-init clean",
             "sudo rm /etc/ssh/ssh_host_*",
             "sudo truncate -s 0 /etc/machine-id",
-            "sudo sync"
+            "sudo sync",
+            "sudo rm /etc/netplan/*.yaml",  # Remove network configuration created by subiquity
+            "sudo rm /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg" #Enable network configuration using cloud-init 
         ]
     }
     
@@ -176,9 +178,13 @@ build {
         ]
     }
 
-    # Delete CD-ROM with ISO https://github.com/hashicorp/packer-plugin-proxmox/issues/83
+    # Delete CD-ROM with autoinstall cloud-init https://github.com/hashicorp/packer-plugin-proxmox/issues/83
     post-processor "shell-local" {
         command = "curl -k -X POST -H 'Authorization: PVEAPIToken=${var.proxmox_api_token_id}=${var.proxmox_api_token_secret}' --data-urlencode delete=ide2 ${var.proxmox_api_url}/nodes/pve/qemu/${var.vm_id}/config"
+    }
+    # Delete CD-ROM with ubuntu instalation ISO https://github.com/hashicorp/packer-plugin-proxmox/issues/83
+    post-processor "shell-local" {
+        command = "curl -k -X POST -H 'Authorization: PVEAPIToken=${var.proxmox_api_token_id}=${var.proxmox_api_token_secret}' --data-urlencode delete=ide3 ${var.proxmox_api_url}/nodes/pve/qemu/${var.vm_id}/config"
     }
     
 }
