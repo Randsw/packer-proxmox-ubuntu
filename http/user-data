@@ -28,14 +28,16 @@ autoinstall:
     - curl
     - ca-certificates
     - git
+  package_upgrade: true
+  package_update: true
   storage:
     layout:
       name: direct
     swap:
       size: 0
   user-data:
-    package_upgrade: false
-    package_update: false
+    package_upgrade: true
+    package_update: true
     timezone: Europe/Moscow
     users:
       - name: ubuntu
